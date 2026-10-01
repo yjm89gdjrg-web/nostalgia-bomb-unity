@@ -1,0 +1,151 @@
+name: Package unsigned iOS IPA from HK Unity export
+
+# Manual bridge: Unity runs on the authorized HK machine; this workflow only
+# downloads the resulting Xcode export and compiles/packages it on macOS.
+on:
+  workflow_dispatch:
+    inputs:
+      archive_url:
+        description: "HTTPS URL of the HK-built .tar.gz Xcode export (no credentials in URL)"
+        required: true
+        type: string
+      archive_sha256:
+        description: "Expected SHA-256 of the exact .tar.gz (64 hexadecimal characters)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nostalgia-archive-ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package-unsigned-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Keep untrusted dispatch inputs in environment variables. Do not splice
+      # them into shell source; archive URLs may contain shell metacharacters.
+      ARCHIVE_URL: ${{ inputs.archive_url }}
+      EXPECTED_SHA256: ${{ inputs.archive_sha256 }}
+    steps:
+      - name: Check out packaging scripts only
+        uses: actions/checkout@v4
+
+      - name: Run source and packaging preflight tests
+        run: |
+          set -euo pipefail
+          python3 -B Tools/verify_source.py
+          python3 -B Tools/test_ios_packaging.py
+          python3 -B Tools/test_safe_extract.py
+          python3 -B Tools/test_validate_xcode_export.py
+          bash Tools/test_archive_input.sh
+
+      - name: Download and verify HK Xcode export archive
+        run: |
+          set -euo pipefail
+          mkdir -p build/download build/logs
+          # This validator emits only generic errors; it never prints the URL.
+          source Tools/archive_input.sh
+          a2d_validate_url "$ARCHIVE_URL"
+          a2d_validate_sha256 "$EXPECTED_SHA256"
+          archive="build/download/NostalgiaBomb-Xcode-NOT-IPA.tar.gz"
+          a2d_download "$ARCHIVE_URL" "$archive"
+          a2d_verify_sha256 "$archive" "$EXPECTED_SHA256"
+          archive_bytes="$(wc -c < "$archive" | tr -d '[:space:]')"
+          {
+            printf 'archive_sha256=%s\n' "$EXPECTED_SHA256"
+            printf 'archive_bytes=%s\n' "$archive_bytes"
+          } > build/logs/archive-verification.txt
+          echo "Verified archive SHA-256 and byte count (URL intentionally omitted from logs)."
+
+      - name: Safely extract and validate Unity Xcode export
+        run: |
+          set -euo pipefail
+          mkdir -p build/logs
+          python3 -B Tools/safe_extract_tar.py \
+            build/download/NostalgiaBomb-Xcode-NOT-IPA.tar.gz \
+            build/extracted | tee build/logs/safe-extraction.txt
+          xcode_root="$(python3 -B Tools/validate_xcode_export.py build/extracted)"
+          [[ "$xcode_root" == "$GITHUB_WORKSPACE"/build/extracted/* ]]
+          printf '%s\n' "$xcode_root" > build/xcode-root.txt
+          printf 'validated_xcode_root=%s\n' "$xcode_root" >> build/logs/archive-verification.txt
+
+      - name: Record macOS Xcode toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version | tee build/logs/xcode-version.txt
+          xcodebuild -showsdks | tee build/logs/xcode-sdks.txt
+          python3 --version | tee build/logs/python-version.txt
+
+      - name: Compile generic iOS Release app without signing
+        run: |
+          set -euo pipefail
+          mkdir -p build/DerivedData build/logs
+          xcode_root="$(cat build/xcode-root.txt)"
+          xcodebuild \
+            -project "$xcode_root/Unity-iPhone.xcodeproj" \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | tee build/logs/xcodebuild-unsigned.log
+
+      - name: Locate, validate and package UNSIGNED Payload
+        run: |
+          set -euo pipefail
+          mkdir -p build/unsigned build/logs
+          version="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('ProjectSettings/ProjectSettings.asset').read_text()
+          match = re.search(r'^  bundleVersion: (\d+(?:\.\d+){0,2})\s*$', text, re.M)
+          if match is None:
+              raise SystemExit('Missing numeric source bundleVersion')
+          print(match.group(1))
+          PY
+          )"
+          bash Tools/package_unsigned_ios.sh \
+            build/DerivedData/Build/Products \
+            build/unsigned/NostalgiaBomb-UNSIGNED.ipa \
+            com.originalprototypes.nostalgiabomb "$version" \
+            | tee build/logs/unsigned-validation.txt
+          shasum -a 256 build/unsigned/NostalgiaBomb-UNSIGNED.ipa \
+            > build/unsigned/NostalgiaBomb-UNSIGNED.ipa.sha256
+          {
+            echo '### UNSIGNED IPA only — NOT directly installable'
+            cat build/logs/unsigned-validation.txt
+            echo 'Apple signing/provisioning and real iPhone testing are still required.'
+            echo 'No device-install, TestFlight or App Store validation was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validated UNSIGNED IPA and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: NostalgiaBomb-UNSIGNED-IPA-from-HK-export-NOT-INSTALLABLE
+          path: build/unsigned/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Preserve download, extraction, toolchain and Xcode logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NostalgiaBomb-HK-export-build-logs
+          path: build/logs/
+          if-no-files-found: ignore
+          retention-days: 7

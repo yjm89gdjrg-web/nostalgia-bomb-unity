@@ -16,8 +16,13 @@ namespace NostalgiaBomb.Editor
                 throw new InvalidOperationException("Missing -nostalgiaOutput <directory>. This entry point exports Xcode, NOT IPA.");
             if(!File.Exists(PrototypeMenus.ScenePath))
                 throw new FileNotFoundException("Committed prototype scene is missing.",PrototypeMenus.ScenePath);
-            if(!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.iOS,BuildTarget.iOS))
-                throw new InvalidOperationException("Unity iOS Build Support is unavailable on this runner.");
+            // Check iOS module by looking for the iOSSupport directory in the Unity Editor installation.
+            // EditorApplication.applicationPath points to the Editor executable; go up to find Data/PlaybackEngines.
+            string editorPath=UnityEditor.EditorApplication.applicationPath; // e.g. /opt/unity/Editor/Unity
+            string editorDir=System.IO.Path.GetDirectoryName(editorPath); // /opt/unity/Editor
+            string iOSPath=System.IO.Path.Combine(editorDir,"Data/PlaybackEngines/iOSSupport");
+            if(!System.IO.Directory.Exists(iOSPath))
+                throw new InvalidOperationException("Unity iOS Build Support is unavailable. Expected at: "+iOSPath);
             output=Path.GetFullPath(output);
             Directory.CreateDirectory(output);
             PrototypeMenus.ConfigureIOS();

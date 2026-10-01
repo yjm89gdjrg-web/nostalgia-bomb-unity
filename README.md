@@ -80,6 +80,42 @@ Use **Nostalgia Bomb → Export iOS Xcode project** with Unity iOS Build Support
 
 **An UNSIGNED IPA cannot directly install or launch on a normal iPhone.** It is an intermediate archive for subsequent legitimate Apple signing/provisioning and authorized installation; re-signing must cover embedded frameworks and use matching app identifier/entitlements/profiles. That signing/install route remains unimplemented and untested. ZIP/header checks are not Apple's signing validation, App Store validation or proof of gameplay.
 
+### Manual GitHub Actions packaging from an HK Linux Unity export — prepared locally, NEVER run
+
+The second workflow, `.github/workflows/package-unsigned-ios-from-archive.yml`, is the credential-free bridge for an authorized HK Linux machine:
+
+- Unity and Unity iOS Build Support run on the HK machine; no Unity account, license, email or password is sent to GitHub-hosted runners.
+- The workflow is **manual-only** (`workflow_dispatch`) and uses only standard `macos-latest`.
+- It accepts two manual inputs: an HTTPS URL for the exact `.tar.gz` Xcode export and its 64-hex-character SHA-256 digest. The URL must not contain embedded credentials. The archive must be reachable by the hosted runner without a private-cookie/login flow.
+- It downloads with HTTPS-only redirects, validates the digest before extraction, then uses `Tools/safe_extract_tar.py` rather than `tar -xzf`. Extraction fails closed on absolute/traversal paths, backslashes/NULs, duplicate names, device/FIFO/special members, escaping/broken symlinks, writes through symlinked parents, and size/member limits. Legitimate relative Unity/framework symlinks and hard links are retained; executable bits are preserved (setuid/setgid/sticky bits are stripped).
+- `Tools/validate_xcode_export.py` requires exactly one real `Unity-iPhone.xcodeproj`, its `project.pbxproj`, and the export-only marker before `xcodebuild` runs. This shape check is not a Unity authenticity or compilation check.
+- Xcode builds `Release` for generic `iphoneos`, ARM64, with signing explicitly disabled. Existing `Tools/package_unsigned_ios.sh` performs the app/Mach-O/plist/ZIP checks and creates `NostalgiaBomb-UNSIGNED.ipa`; the IPA and checksum upload only after successful validation. Download/extraction/toolchain/Xcode/package logs upload with `if: always()`.
+- The workflow never signs, installs, publishes, uploads a release, or tests on a device. An unsigned IPA is not directly installable on a normal iPhone.
+
+#### HK export and dispatch procedure
+
+1. On the authorized HK machine, export an iOS **Xcode project only** with the committed Unity entry point (`NostalgiaBomb.Editor.CiBuild.ExportIOS`), for example:
+   ```sh
+   /path/to/Unity -batchmode -nographics -quit \\
+     -projectPath /absolute/path/to/nostalgia-bomb-unity \\
+     -buildTarget iOS \\
+     -executeMethod NostalgiaBomb.Editor.CiBuild.ExportIOS \\
+     -nostalgiaOutput /absolute/path/to/build/iOS/NostalgiaBomb-Xcode \\
+     -logFile /absolute/path/to/build/unity-ios-export.log
+   ```
+   Confirm the output contains `Unity-iPhone.xcodeproj` and `EXPORT-ONLY-NOT-IPA.txt`. Do not upload a Unity `Library` directory or a signed IPA.
+2. Create the archive from the **parent** of the export directory so the project is restored with one top-level directory and Unix modes survive transport:
+   ```sh
+   cd /absolute/path/to/build/iOS
+   tar -czf NostalgiaBomb-Xcode-NOT-IPA.tar.gz NostalgiaBomb-Xcode
+   shasum -a 256 NostalgiaBomb-Xcode-NOT-IPA.tar.gz
+   ```
+   Keep the `.tar.gz` unchanged after calculating the digest. If using a generic object store, use an HTTPS object URL with no URL credentials and make it downloadable by the GitHub runner; do not paste tokens into the URL.
+3. In GitHub Actions, choose **Package unsigned iOS IPA from HK Unity export → Run workflow**, paste the HTTPS URL and the digest, and start it manually. The digest is visible in the workflow log only as the expected value; the URL is deliberately omitted from project logs. Dispatch inputs are not secrets, so treat the URL and archive as non-confidential unless the hosting service provides separate access control.
+4. Download the successful `NostalgiaBomb-UNSIGNED-IPA-from-HK-export-NOT-INSTALLABLE` artifact and its checksum. Keep the `NostalgiaBomb-HK-export-build-logs` artifact for troubleshooting. A failed build can still provide logs; a failed digest/extraction/validation never reaches Xcode.
+
+The archive workflow has no Unity entitlement preflight because it does not invoke Unity. It still depends on a valid, compatible Unity export from the authorized HK environment, a reachable HTTPS archive, a matching SHA-256, and a compatible Xcode project/toolchain. This implementation was not run on GitHub; no real archive was fetched and no Xcode build was performed here.
+
 ### Local packaging validation — synthetic apps only
 
 ```sh

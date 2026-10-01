@@ -36,6 +36,7 @@ jobs:
           targetPlatform: iOS
           buildMethod: NostalgiaBomb.Editor.CiBuild.ExportIOS
           unityVersion: 6000.0.60f1
+          providerStrategy: email
 
       - name: Require actual Xcode project output
         run: |

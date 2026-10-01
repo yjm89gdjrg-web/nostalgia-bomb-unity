@@ -2,6 +2,8 @@ name: "Unity iOS export and UNSIGNED IPA (NOT installable)"
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   export-xcode:

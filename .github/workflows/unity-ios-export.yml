@@ -65,16 +65,8 @@ jobs:
       - name: Build unsigned IPA with xcodebuild
         run: |
           cd xcode-project
-          xcodebuild -project Unity-iPhone.xcodeproj \
-            -scheme Unity-iPhone \
-            -configuration Release \
-            -archivePath build/archive.xcarchive \
-            archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
           
-          xcodebuild -exportArchive \
-            -archivePath build/archive.xcarchive \
-            -exportPath build/ipa \
-            -exportOptionsPlist <(cat <<PLIST
+          cat > ExportOptions.plist <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -87,8 +79,18 @@ jobs:
   <true/>
 </dict>
 </plist>
-PLIST
-)
+EOF
+          
+          xcodebuild -project Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -archivePath build/archive.xcarchive \
+            archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          
+          xcodebuild -exportArchive \
+            -archivePath build/archive.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist ExportOptions.plist
 
       - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4

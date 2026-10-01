@@ -1,0 +1,77 @@
+PASS: JSON Packages/manifest.json
+PASS: JSON Assets/Editor/NostalgiaBomb.Editor.asmdef
+PASS: JSON Assets/Scripts/NostalgiaBomb.Runtime.asmdef
+PASS: JSON Assets/Tests/EditMode/NostalgiaBomb.Tests.asmdef
+PASS: C# delimiters Assets/Editor/CiBuild.cs
+PASS: namespace CiBuild.cs
+PASS: C# delimiters Assets/Editor/PrototypeMenus.cs
+PASS: namespace PrototypeMenus.cs
+PASS: C# delimiters Assets/Scripts/Arena.cs
+PASS: namespace Arena.cs
+PASS: C# delimiters Assets/Scripts/Combatant.cs
+PASS: namespace Combatant.cs
+PASS: C# delimiters Assets/Scripts/MatchGame.cs
+PASS: namespace MatchGame.cs
+PASS: C# delimiters Assets/Scripts/RoundRules.cs
+PASS: namespace RoundRules.cs
+PASS: C# delimiters Assets/Scripts/TouchControls.cs
+PASS: namespace TouchControls.cs
+PASS: C# delimiters Assets/Tests/EditMode/RoundRulesTests.cs
+PASS: namespace RoundRulesTests.cs
+PASS: meta present Assets/Scenes
+PASS: unique GUID Scenes
+PASS: meta present Assets/Tests
+PASS: unique GUID Tests
+PASS: meta present Assets/Scripts
+PASS: unique GUID Scripts
+PASS: meta present Assets/Editor
+PASS: unique GUID Editor
+PASS: meta present Assets/Resources
+PASS: unique GUID Resources
+PASS: meta present Assets/Scenes/Prototype.unity
+PASS: unique GUID Prototype.unity
+PASS: meta present Assets/Tests/EditMode
+PASS: unique GUID EditMode
+PASS: meta present Assets/Scripts/TouchControls.cs
+PASS: unique GUID TouchControls.cs
+PASS: meta present Assets/Scripts/Combatant.cs
+PASS: unique GUID Combatant.cs
+PASS: meta present Assets/Scripts/Arena.cs
+PASS: unique GUID Arena.cs
+PASS: meta present Assets/Scripts/MatchGame.cs
+PASS: unique GUID MatchGame.cs
+PASS: meta present Assets/Scripts/NostalgiaBomb.Runtime.asmdef
+PASS: unique GUID NostalgiaBomb.Runtime.asmdef
+PASS: meta present Assets/Scripts/RoundRules.cs
+PASS: unique GUID RoundRules.cs
+PASS: meta present Assets/Editor/PrototypeMenus.cs
+PASS: unique GUID PrototypeMenus.cs
+PASS: meta present Assets/Editor/NostalgiaBomb.Editor.asmdef
+PASS: unique GUID NostalgiaBomb.Editor.asmdef
+PASS: meta present Assets/Editor/CiBuild.cs
+PASS: unique GUID CiBuild.cs
+PASS: meta present Assets/Resources/Greybox.shader
+PASS: unique GUID Greybox.shader
+PASS: meta present Assets/Tests/EditMode/NostalgiaBomb.Tests.asmdef
+PASS: unique GUID NostalgiaBomb.Tests.asmdef
+PASS: meta present Assets/Tests/EditMode/RoundRulesTests.cs
+PASS: unique GUID RoundRulesTests.cs
+PASS: saved scene points to MatchGame script
+PASS: saved scene enabled in build settings
+PASS: legacy input selected
+PASS: rules independent of Unity
+PASS: 14 NUnit specifications present (NOT executed)
+PASS: nine solid wall/cover footprints extracted
+PASS: footprint waypoint model connected (68 nodes)
+PASS: spawn/site (-3, -16) can connect to waypoint graph
+PASS: spawn/site (0, -16) can connect to waypoint graph
+PASS: spawn/site (3, -16) can connect to waypoint graph
+PASS: spawn/site (-3, 17) can connect to waypoint graph
+PASS: spawn/site (0, 17) can connect to waypoint graph
+PASS: spawn/site (3, 17) can connect to waypoint graph
+PASS: spawn/site (-10, 13) can connect to waypoint graph
+PASS: spawn/site (10, 13) can connect to waypoint graph
+PASS: west dogleg blocks a naive direct route
+PASS: central workshop blocks a naive direct route
+
+STRUCTURAL CHECKS COMPLETE. Unity compilation, NUnit execution, physics, touch and iOS build NOT verified.

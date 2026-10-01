@@ -1,0 +1,10 @@
+{
+  "name": "NostalgiaBomb.Editor",
+  "rootNamespace": "NostalgiaBomb.Editor",
+  "references": [
+    "NostalgiaBomb.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

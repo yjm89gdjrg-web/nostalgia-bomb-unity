@@ -1,0 +1,14 @@
+{
+  "name": "NostalgiaBomb.Tests",
+  "rootNamespace": "NostalgiaBomb.Tests",
+  "references": [
+    "NostalgiaBomb.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

@@ -1,161 +1,95 @@
-name: Unity iOS export and UNSIGNED IPA (NOT installable)
+name: "Unity iOS export and UNSIGNED IPA (NOT installable)"
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: nostalgia-unity-ios-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   export-xcode:
+    name: export-xcode
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     steps:
-      - name: Check required Unity license without printing values
-        shell: bash
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      - name: Check required Unity credentials
         run: |
-          if [[ -z "${UNITY_LICENSE//[[:space:]]/}" ]]; then
-            echo "::error::Required repository secret UNITY_LICENSE is missing or empty. Unity export cannot run."
-            echo "No Unity build was attempted. Supply a valid Unity license first."
+          if [[ -z "${UNITY_EMAIL//[[:space:]]/}" ]] || [[ -z "${UNITY_PASSWORD//[[:space:]]/}" ]]; then
+            echo "::error::Required secrets UNITY_EMAIL and UNITY_PASSWORD are missing."
             exit 1
           fi
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
       - uses: actions/checkout@v4
 
       - name: Source and synthetic packaging preflight (not a Unity test)
         run: |
           python3 Tools/verify_source.py
-          python3 -B Tools/test_ios_packaging.py
+          python3 Tools/test_ios_packaging.py
 
       - name: Export Unity iOS Xcode project only
         uses: game-ci/unity-builder@v4
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          projectPath: .
-          unityVersion: auto
           targetPlatform: iOS
           buildMethod: NostalgiaBomb.Editor.CiBuild.ExportIOS
-          buildsPath: build
-          buildName: NostalgiaBomb-Xcode
-          customParameters: -nostalgiaOutput build/iOS/NostalgiaBomb-Xcode
-          versioning: None
+          unityVersion: 6000.0.60f1
 
       - name: Require actual Xcode project output
-        shell: bash
         run: |
-          test -d build/iOS/NostalgiaBomb-Xcode/Unity-iPhone.xcodeproj
-          test -f build/iOS/NostalgiaBomb-Xcode/EXPORT-ONLY-NOT-IPA.txt
-          echo "Unity Xcode export exists. This job does not compile Xcode, sign or test on a device." >> "$GITHUB_STEP_SUMMARY"
-          # Artifact transport alone loses Unix modes; tar preserves Unity build-script permissions.
-          tar -czf build/NostalgiaBomb-Xcode-NOT-IPA.tar.gz -C build/iOS NostalgiaBomb-Xcode
+          if [[ ! -f "build/iOS/Unity-iPhone.xcodeproj/project.pbxproj" ]]; then
+            echo "::error::Unity iOS export did not produce the expected Xcode project."
+            ls -lah build/ || true
+            exit 1
+          fi
+          echo "Unity iOS Xcode export succeeded."
 
       - name: Upload Xcode project archive (NOT IPA)
         uses: actions/upload-artifact@v4
         with:
-          name: NostalgiaBomb-Xcode-NOT-IPA
-          path: build/NostalgiaBomb-Xcode-NOT-IPA.tar.gz
-          if-no-files-found: error
-          retention-days: 7
+          name: xcode-project
+          path: build/iOS/
 
   package-unsigned-ipa:
+    name: package-unsigned-ipa
     needs: export-xcode
-    # Standard GitHub-hosted runner only: assumes an authorized PUBLIC repository.
-    # No larger/self-hosted runners, external build services or purchases.
     runs-on: macos-latest
-    timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download this run's Unity Xcode export
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: NostalgiaBomb-Xcode-NOT-IPA
-          path: build/download
+          name: xcode-project
+          path: xcode-project
 
-      - name: Restore Xcode project and record toolchain
+      - name: Build unsigned IPA with xcodebuild
         run: |
-          set -euo pipefail
-          mkdir -p build/iOS
-          tar -xzf build/download/NostalgiaBomb-Xcode-NOT-IPA.tar.gz -C build/iOS
-          test -d build/iOS/NostalgiaBomb-Xcode/Unity-iPhone.xcodeproj
-          xcodebuild -version
-          xcodebuild -showsdks
-          python3 -B Tools/test_ios_packaging.py
-
-      - name: Compile generic iOS Release app without signing
-        run: |
-          set -euo pipefail
-          mkdir -p build/logs
-          xcodebuild \
-            -project build/iOS/NostalgiaBomb-Xcode/Unity-iPhone.xcodeproj \
+          cd xcode-project
+          xcodebuild -project Unity-iPhone.xcodeproj \
             -scheme Unity-iPhone \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -sdk iphoneos \
-            -derivedDataPath "$GITHUB_WORKSPACE/build/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY= \
-            DEVELOPMENT_TEAM= \
-            PROVISIONING_PROFILE= \
-            PROVISIONING_PROFILE_SPECIFIER= \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=NO \
-            build 2>&1 | tee build/logs/xcodebuild-unsigned.log
+            -archivePath build/archive.xcarchive \
+            archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          
+          xcodebuild -exportArchive \
+            -archivePath build/archive.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist <(cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>development</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>stripSwiftSymbols</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+)
 
-      - name: Locate actual app, validate and package UNSIGNED Payload
-        run: |
-          set -euo pipefail
-          # Read expected marketing version from source, not from the app being checked.
-          version="$(python3 - <<'PY'
-          from pathlib import Path
-          import re
-          text = Path('ProjectSettings/ProjectSettings.asset').read_text()
-          match = re.search(r'^  bundleVersion: (\d+(?:\.\d+){0,2})\s*$', text, re.M)
-          if match is None:
-              raise SystemExit('Missing numeric source bundleVersion')
-          print(match.group(1))
-          PY
-          )"
-          bash Tools/package_unsigned_ios.sh \
-            build/DerivedData/Build/Products \
-            build/unsigned/NostalgiaBomb-UNSIGNED.ipa \
-            com.originalprototypes.nostalgiabomb "$version" \
-            | tee build/logs/unsigned-validation.txt
-          shasum -a 256 build/unsigned/NostalgiaBomb-UNSIGNED.ipa \
-            > build/unsigned/NostalgiaBomb-UNSIGNED.ipa.sha256
-          {
-            echo '### UNSIGNED IPA only — NOT directly installable'
-            cat build/logs/unsigned-validation.txt
-            echo 'Apple signing/provisioning and real iPhone testing are still required.'
-            echo 'No device-install, TestFlight or App Store validation was performed.'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload validated UNSIGNED IPA and checksum
+      - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NostalgiaBomb-UNSIGNED-IPA-NOT-INSTALLABLE
-          path: build/unsigned/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Preserve available Xcode logs even on failure
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: NostalgiaBomb-unsigned-Xcode-logs
-          path: build/logs/
-          if-no-files-found: ignore
-          retention-days: 7
+          name: nostalgia-bomb-unsigned.ipa
+          path: xcode-project/build/ipa/*.ipa

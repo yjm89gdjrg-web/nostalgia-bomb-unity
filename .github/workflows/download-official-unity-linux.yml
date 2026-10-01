@@ -1,0 +1,28 @@
+name: Download official Unity Linux installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Download official Editor and iOS module
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p installers
+          base='https://download.unity3d.com/download_unity/61dfb374e36f'
+          curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --connect-timeout 30 --max-time 3600 "$base/LinuxEditorInstaller/Unity-6000.0.60f1.tar.xz" -o installers/Unity-6000.0.60f1.tar.xz
+          curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --connect-timeout 30 --max-time 900 "$base/LinuxEditorTargetInstaller/UnitySetup-iOS-Support-for-Editor-6000.0.60f1.tar.xz" -o installers/UnitySetup-iOS-Support-for-Editor-6000.0.60f1.tar.xz
+          printf '%s\n' 'fb4064fef67339d3f9bd2b133cdc084c  installers/Unity-6000.0.60f1.tar.xz' '00ea1acbc806ba91ed4936e1967b6c82  installers/UnitySetup-iOS-Support-for-Editor-6000.0.60f1.tar.xz' | md5sum --check --strict
+          sha256sum installers/*.tar.xz | tee installers/SHA256SUMS
+      - name: Preserve verified official installers for HK installation
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-unity-6000.0.60f1-linux-ios
+          path: installers/
+          compression-level: 0
+          retention-days: 2
+          if-no-files-found: error
